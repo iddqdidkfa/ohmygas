@@ -7,13 +7,19 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PriceEntry, Station } from '@ohmygas/shared';
 import { fetchMinfin } from './minfin.js';
-import { fallbackStations, fetchOverpass } from './stations.js';
+import { TILES, fallbackStations, fetchStationsTiled, mergeWithOld, type Tile } from './stations.js';
 
 const DATA = resolve(dirname(fileURLToPath(import.meta.url)), '../../../data');
 const STATIONS_MAX_AGE_MS = 14 * 24 * 3600_000;
 
 interface PricesFile { fetchedAt: string; prices: PriceEntry[] }
-interface StationsFile { fetchedAt: string | null; source: 'overpass' | 'fallback'; stations: Station[] }
+interface StationsFile {
+  fetchedAt: string | null;
+  source: 'overpass' | 'partial' | 'fallback';
+  /** tiles still to fetch after a partial run (next run resumes only these) */
+  pending?: Tile[];
+  stations: Station[];
+}
 /** "networkId:FUEL" -> [[YYYY-MM-DD, price], ...] */
 type History = Record<string, [string, number][]>;
 
@@ -49,19 +55,38 @@ async function updatePrices() {
 async function updateStations() {
   const old = await readJson<StationsFile>('stations.json');
   const fresh = old?.source === 'overpass' && old.fetchedAt && Date.now() - Date.parse(old.fetchedAt) < STATIONS_MAX_AGE_MS;
-  if (fresh) return console.log(`stations: ${old.stations.length} cached, skipping`);
-  try {
-    const stations = (await fetchOverpass()).sort((a, b) => a.id.localeCompare(b.id));
+  if (fresh && !old.pending?.length) return console.log(`stations: ${old.stations.length} cached, skipping`);
+
+  // Resume unfinished tiles from a previous partial run; otherwise refresh everything.
+  const resuming = !!old?.pending?.length;
+  const tiles = resuming ? old!.pending! : TILES;
+  const { stations: got, failed, done } = await fetchStationsTiled(Date.now() + 8 * 60_000, tiles);
+  const sort = (l: Station[]) => l.sort((a, b) => a.id.localeCompare(b.id));
+  const usableOld = old && old.source !== 'fallback' ? old.stations : [];
+  // a first-time or full refresh that fully succeeds replaces everything; otherwise merge into what we have
+  const stations = sort(mergeWithOld(got, usableOld, resuming || failed.length ? done : TILES));
+
+  if (!failed.length) {
     await writeJson('stations.json', { fetchedAt: new Date().toISOString(), source: 'overpass', stations } satisfies StationsFile);
-    console.log(`stations: ${stations.length} from Overpass`);
-  } catch (e) {
-    console.warn(`stations: Overpass failed (${(e as Error).message})`);
-    if (!old) {
-      await writeJson('stations.json', { fetchedAt: null, source: 'fallback', stations: fallbackStations() } satisfies StationsFile);
-      console.warn('stations: wrote offline fallback set');
-    }
-    throw e;
+    return console.log(`stations: ${stations.length} from Overpass`);
   }
+
+  const summary = `${done.length} tiles ok, ${failed.length} pending: ${failed.map((t) => t.id).join(', ')}`;
+  if (stations.length) {
+    // Keep a previous complete refresh date so freshness logic still retries; a first fill has none (null) and retries next run.
+    const complete = old?.source === 'overpass' && !old.pending?.length;
+    await writeJson('stations.json', {
+      fetchedAt: complete ? old!.fetchedAt : null,
+      source: complete ? 'overpass' : 'partial',
+      pending: failed,
+      stations,
+    } satisfies StationsFile);
+    console.warn(`stations: partial, ${stations.length} stations saved (${summary})`);
+  } else if (!old) {
+    await writeJson('stations.json', { fetchedAt: null, source: 'fallback', stations: fallbackStations() } satisfies StationsFile);
+    console.warn('stations: wrote offline fallback set');
+  }
+  throw new Error(`stations incomplete: ${summary}`);
 }
 
 // usage: tsx src/update.ts [prices|stations|all]  (default: all)
