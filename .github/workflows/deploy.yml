@@ -24,6 +24,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Always build the newest commit of the branch, even when an old run is re-run
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -49,8 +52,18 @@ jobs:
             echo "No data changes"
           else
             git commit -m "chore(data): update prices [skip ci]"
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            # Data files are generated: if another run pushed first, our fresher data wins any conflict.
+            pushed=0
+            for attempt in 1 2 3; do
+              if git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+                pushed=1
+                break
+              fi
+              echo "push attempt $attempt failed, retrying"
+              git rebase --abort 2>/dev/null || true
+              sleep 5
+            done
+            [ "$pushed" = 1 ] || { echo "::error::could not push data commit"; exit 1; }
           fi
 
       - run: npm run build
