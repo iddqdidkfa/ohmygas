@@ -1,0 +1,23 @@
+{
+  "name": "ohmygas",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @ohmygas/web",
+    "update-data": "npm run update -w @ohmygas/data",
+    "build": "npm run build -w @ohmygas/web",
+    "preview": "npm run preview -w @ohmygas/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
