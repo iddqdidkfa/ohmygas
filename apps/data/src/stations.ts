@@ -58,8 +58,8 @@ export function parseOverpass(elements: OsmElement[]): Station[] {
       id: `${el.type[0]}${el.id}`,
       networkId,
       name: t['name:uk'] ?? t.name ?? t.brand ?? 'АЗС',
-      lat,
-      lng,
+      lat: Math.round(lat * 1e6) / 1e6, // ~0.1 m, plenty for a map
+      lng: Math.round(lng * 1e6) / 1e6,
       address: address || undefined,
       region: nearestRegion(lat, lng),
     });

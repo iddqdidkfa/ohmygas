@@ -33,15 +33,18 @@ npm test && npm run typecheck
 
 ### Оновлення станцій (локально)
 
-Список АЗС оновлюється вручну на вашій машині (Overpass часто перевантажений) і комітиться:
+Список АЗС оновлюється вручну на вашій машині. Рекомендований спосіб — з готового вивантаження OpenStreetMap
+(Overpass часто перевантажений). Файл ~890 МБ, оновлюється щодня; у репозиторій він не потрапляє:
 
 ```bash
 git pull --rebase                     # бот міг закомітити нові ціни
-npm run update-data -- stations       # ~5–8 хв; якщо частину тайлів не отримано — просто запустіть ще раз
+curl -L -o /tmp/ukraine.osm.pbf https://download.geofabrik.de/europe/ukraine/ukraine-latest.osm.pbf
+npm run stations-from-pbf -- /tmp/ukraine.osm.pbf     # ~2 хв
 git add data/stations.json && git commit -m "chore(data): update stations" && git push
 ```
 
-Незавершені тайли зберігаються у `data/stations.json` (`pending`), наступний запуск продовжить саме з них.
+Альтернатива — Overpass (`npm run update-data -- stations`, ~5–8 хв, може не завершитись; незавершені
+тайли зберігаються у `data/stations.json` як `pending`, наступний запуск продовжить саме з них).
 
 ## Обмеження
 

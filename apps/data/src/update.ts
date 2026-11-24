@@ -15,7 +15,7 @@ const STATIONS_MAX_AGE_MS = 14 * 24 * 3600_000;
 interface PricesFile { fetchedAt: string; prices: PriceEntry[] }
 interface StationsFile {
   fetchedAt: string | null;
-  source: 'overpass' | 'partial' | 'fallback';
+  source: 'overpass' | 'extract' | 'partial' | 'fallback';
   /** tiles still to fetch after a partial run (next run resumes only these) */
   pending?: Tile[];
   stations: Station[];
@@ -54,7 +54,7 @@ async function updatePrices() {
 
 async function updateStations() {
   const old = await readJson<StationsFile>('stations.json');
-  const fresh = old?.source === 'overpass' && old.fetchedAt && Date.now() - Date.parse(old.fetchedAt) < STATIONS_MAX_AGE_MS;
+  const fresh = (old?.source === 'overpass' || old?.source === 'extract') && old.fetchedAt && Date.now() - Date.parse(old.fetchedAt) < STATIONS_MAX_AGE_MS;
   if (fresh && !old.pending?.length) return console.log(`stations: ${old.stations.length} cached, skipping`);
 
   // Resume unfinished tiles from a previous partial run; otherwise refresh everything.
