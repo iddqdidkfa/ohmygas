@@ -64,9 +64,18 @@ async function updateStations() {
   }
 }
 
+// usage: tsx src/update.ts [prices|stations|all]  (default: all)
+const target = process.argv[2] ?? 'all';
+const jobs = { prices: updatePrices, stations: updateStations };
+if (target !== 'all' && !(target in jobs)) {
+  console.error(`unknown target "${target}" (use prices | stations | all)`);
+  process.exit(2);
+}
+
 await mkdir(DATA, { recursive: true });
 let failed = false;
-for (const [name, job] of [['prices', updatePrices], ['stations', updateStations]] as const) {
+for (const [name, job] of Object.entries(jobs)) {
+  if (target !== 'all' && target !== name) continue;
   try {
     await job();
   } catch (e) {

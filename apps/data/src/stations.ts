@@ -43,13 +43,15 @@ export function parseOverpass(elements: OsmElement[]): Station[] {
 
 export async function fetchOverpass(): Promise<Station[]> {
   let last: Error = new Error('no endpoints');
-  for (const url of OVERPASS) {
+  // Overpass is often overloaded: two passes over all mirrors, with a pause between
+  for (const url of [...OVERPASS, ...OVERPASS]) {
+    if (last.message !== 'no endpoints' && url === OVERPASS[0]) await new Promise((r) => setTimeout(r, 20_000));
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'ohmygas/0.1 (price monitor)' },
         body: new URLSearchParams({ data: QUERY }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
       const json = (await res.json()) as { elements: OsmElement[] };

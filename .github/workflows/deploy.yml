@@ -31,11 +31,19 @@ jobs:
       - run: npm ci
       - run: npm test
 
-      # A failed scrape must not block the deploy, but should still turn the run red (see last step).
-      - name: Update price and station data
-        id: update
+      # Prices and stations are independent: a failure in one must not block the other or the deploy.
+      # Failures are reported at the end (last step) so the run still turns red.
+      - name: Update prices
+        id: prices
         continue-on-error: true
-        run: npm run update-data
+        timeout-minutes: 3
+        run: npm run update-data -- prices
+
+      - name: Update stations
+        id: stations
+        continue-on-error: true
+        timeout-minutes: 5
+        run: npm run update-data -- stations
 
       - name: Commit updated data
         run: |
@@ -57,8 +65,8 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Fail run if the data update failed
-        if: steps.update.outcome == 'failure'
+      - name: Fail run if a data update failed
+        if: steps.prices.outcome == 'failure' || steps.stations.outcome == 'failure'
         run: |
-          echo "::error::Data update failed - site deployed with previous data"
+          echo "::error::Data update failed (prices: ${{ steps.prices.outcome }}, stations: ${{ steps.stations.outcome }}) - site deployed with previous data"
           exit 1
